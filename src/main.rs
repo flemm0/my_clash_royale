@@ -4,6 +4,7 @@ extern crate dotenv;
 extern crate polars;
 
 use dotenv::dotenv;
+use polars::lazy::dsl::when;
 use polars_io::json::JsonReader;
 use std::env;
 use std::io::Cursor;
@@ -53,21 +54,22 @@ fn transform_dataframe(df: DataFrame) -> LazyFrame {
         .with_column(
             col("arena")
                 .struct_()
-                .rename_fields(vec![String::from("arena_id"), String::from("arena_name")])
+                .rename_fields(vec![String::from("arenaId"), String::from("arenaName")])
         )
         .with_column(
             col("gameMode")
                 .struct_()
-                .rename_fields(vec![String::from("gamemode_id"), String::from("gamemode_name")])
+                .rename_fields(vec![String::from("gamemodeId"), String::from("gamemodeName")])
         )
         .with_column(
             col("team")
                 .explode()
                 .struct_()
                 .rename_fields(vec![
-                    String::from("team_tag"), String::from("team_name"), String::from("team_starting_trophies"), 
-                    String::from("team_crowns"), String::from("team_king_tower_hit_points"), 
-                    String::from("team_princess_tower_hit_points")
+                    String::from("teamTag"), String::from("teamName"), String::from("teamStartingTrophies"), 
+                    String::from("teamTrophyChange"), String::from("teamCrowns"), String::from("teamKingTowerHitPoints"), 
+                    String::from("teamTrincessTowerHitPoints"), String::from("teamClan"),
+                    String::from("teamCards")
                 ])
         )
         .with_column(
@@ -75,12 +77,28 @@ fn transform_dataframe(df: DataFrame) -> LazyFrame {
                 .explode()
                 .struct_()
                 .rename_fields(vec![
-                    String::from("opponent_tag"), String::from("opponent_name"), String::from("opponent_starting_trophies"), 
-                    String::from("opponent_crowns"), String::from("opponent_king_tower_hit_points"), 
-                    String::from("opponent_princess_tower_hit_points")
+                    String::from("opponentTag"), String::from("opponentName"), String::from("opponentStartingTrophies"), 
+                    String::from("opponentTrophyChange"), String::from("opponentCrowns"), String::from("opponentKingTowerHitPoints"), 
+                    String::from("opponentTrincessTowerHitPoints"), String::from("opponentClan"),
+                    String::from("opponentCards")
                 ])
         )
         .unnest(["arena", "gameMode", "team", "opponent"])
+        .with_column(
+            col("teamClan")
+            .struct_()
+            .rename_fields(vec![String::from("teamClanTag"), String::from("teamClanName"), String::from("teamClanBadgeId")]))
+        .with_column(
+            col("opponentClan")
+            .struct_()
+            .rename_fields(vec![String::from("opponentClanTag"), String::from("opponentClanName"), String::from("opponentClanBadgeId")]))
+        .unnest(["teamClan", "opponentClan"])
+        .with_column(
+            when(col("teamCrowns").gt(col("opponentCrowns")))
+                .then(lit("team"))
+                .otherwise(lit("opponent"))
+                .alias("winner")
+        )
 }
 
 
