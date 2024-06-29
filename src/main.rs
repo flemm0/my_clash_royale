@@ -7,8 +7,12 @@ use dotenv::dotenv;
 use polars_io::json::JsonReader;
 use std::env;
 use std::io::Cursor;
+use std::path::PathBuf;
 use polars::prelude::*;
 use polars_io::SerReader;
+use chrono::prelude::*;
+use std::fs::File;
+use dirs::home_dir;
 
 
 
@@ -32,6 +36,7 @@ async fn fetch_battles_json() -> std::result::Result<String, Box<dyn std::error:
     }
 }
 
+
 fn battles_to_dataframe(json_text: String) -> Result<DataFrame, PolarsError> {
     let cursor = Cursor::new(json_text);
     let df = JsonReader::new(cursor)
@@ -40,6 +45,7 @@ fn battles_to_dataframe(json_text: String) -> Result<DataFrame, PolarsError> {
         .map_err(|e| PolarsError::ComputeError(e.to_string().into()));
     Ok(df?)
 }
+
 
 fn transform_dataframe(df: DataFrame) -> LazyFrame {
     df.lazy()
@@ -78,12 +84,34 @@ fn transform_dataframe(df: DataFrame) -> LazyFrame {
 }
 
 
+fn write_parquet_file(lf: LazyFrame) -> Result<(), std::io::Error>{
+    let now: DateTime<Local> = Local::now();
+
+    let fname = now.format("battlelog_%Y-%m-%d_%H-%M-%S.parquet").to_string();
+
+    let mut path: PathBuf = home_dir().expect("Failed to get home directory");
+    path.push("my_clash_royale");
+    path.push("my_data");
+    path.push(fname);
+
+    let _ = std::fs::create_dir_all(path.parent().unwrap());
+
+    let file = File::create(&path).unwrap();
+    let mut df = lf.collect().unwrap();
+    ParquetWriter::new(&file).finish(&mut df).unwrap();
+
+    Ok(())
+}
+
+
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let json_text = fetch_battles_json().await?;
     let df = battles_to_dataframe(json_text)?;
-    println!("Raw data:\n{}", df);
+    // println!("Raw data:\n{}", &df);
     let lf = transform_dataframe(df.clone());
-    println!("{}", lf.collect().expect("Failed to transform dataframe"));
+    // df = lf.clone().collect().expect("Failed to transform dataframe");
+    // println!("Transformed data:\n{}", df);
+    write_parquet_file(lf)?;
     Ok(())
 }
