@@ -14,7 +14,7 @@ use polars_io::SerReader;
 use chrono::prelude::*;
 use std::fs::File;
 use dirs::home_dir;
-
+use duckdb::Connection;
 
 
 async fn fetch_battles_json() -> std::result::Result<String, Box<dyn std::error::Error>>{
@@ -102,10 +102,10 @@ fn transform_dataframe(df: DataFrame) -> LazyFrame {
 }
 
 
-fn write_parquet_file(lf: LazyFrame) -> Result<(), std::io::Error>{
+fn write_staging_parquet_file(lf: LazyFrame) -> Result<(), std::io::Error>{
     let now: DateTime<Local> = Local::now();
 
-    let fname = now.format("battlelog_%Y-%m-%d_%H-%M-%S.parquet").to_string();
+    let fname = now.format("battlelog_staging.parquet").to_string();
 
     let mut path: PathBuf = home_dir().expect("Failed to get home directory");
     path.push("my_clash_royale");
@@ -121,6 +121,22 @@ fn write_parquet_file(lf: LazyFrame) -> Result<(), std::io::Error>{
     Ok(())
 }
 
+fn write_final_parquet_file() -> Result<(), Box<dyn std::error::Error>> {
+    let file_path = dirs::home_dir()
+        .unwrap()
+        .join("my_clash_royale/my_data/battlelog_final.parquet");
+    let file_path_str = file_path.to_str().expect("Failed to convert to path string");
+    let glob_path_str = file_path_str.replace("_final", "*");
+    let sql = format!("COPY (SELECT DISTINCT * FROM '{}') TO '{}'", &glob_path_str, &file_path_str);
+
+    let conn = Connection::open_in_memory()?;
+    // let mut stmt = conn.prepare(&sql)?;
+    match conn.execute(&sql, []) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(Box::new(e)),
+    }
+}
+
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -130,6 +146,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let lf = transform_dataframe(df.clone());
     // df = lf.clone().collect().expect("Failed to transform dataframe");
     // println!("Transformed data:\n{}", df);
-    write_parquet_file(lf)?;
+    write_staging_parquet_file(lf)?;
+    write_final_parquet_file()?;
     Ok(())
 }
