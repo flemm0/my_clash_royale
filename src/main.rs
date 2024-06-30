@@ -1,9 +1,3 @@
-
-extern crate reqwest;
-extern crate serde_json;
-extern crate dotenv;
-extern crate polars;
-
 use dotenv::dotenv;
 use polars::lazy::dsl::when;
 use polars_io::json::JsonReader;
