@@ -1,3 +1,4 @@
+
 extern crate reqwest;
 extern crate serde_json;
 extern crate dotenv;
@@ -68,7 +69,7 @@ fn transform_dataframe(df: DataFrame) -> LazyFrame {
                 .rename_fields(vec![
                     String::from("teamTag"), String::from("teamName"), String::from("teamStartingTrophies"), 
                     String::from("teamTrophyChange"), String::from("teamCrowns"), String::from("teamKingTowerHitPoints"), 
-                    String::from("teamTrincessTowerHitPoints"), String::from("teamClan"),
+                    String::from("teamPrincessTowerHitPoints"), String::from("teamClan"),
                     String::from("teamCards")
                 ])
         )
@@ -79,7 +80,7 @@ fn transform_dataframe(df: DataFrame) -> LazyFrame {
                 .rename_fields(vec![
                     String::from("opponentTag"), String::from("opponentName"), String::from("opponentStartingTrophies"), 
                     String::from("opponentTrophyChange"), String::from("opponentCrowns"), String::from("opponentKingTowerHitPoints"), 
-                    String::from("opponentTrincessTowerHitPoints"), String::from("opponentClan"),
+                    String::from("opponentPrincessTowerHitPoints"), String::from("opponentClan"),
                     String::from("opponentCards")
                 ])
         )
@@ -127,10 +128,48 @@ fn write_final_parquet_file() -> Result<(), Box<dyn std::error::Error>> {
         .join("my_clash_royale/my_data/battlelog_final.parquet");
     let file_path_str = file_path.to_str().expect("Failed to convert to path string");
     let glob_path_str = file_path_str.replace("_final", "*");
-    let sql = format!("COPY (SELECT DISTINCT * FROM '{}') TO '{}'", &glob_path_str, &file_path_str);
+    let sql = format!(
+        "COPY (
+            SELECT 
+                DISTINCT
+                    type,
+                    battleTime,
+                    isLadderTournament,
+                    arenaId,
+                    arenaName,
+                    gamemodeId,
+                    gamemodeName,
+                    deckSelection,
+                    teamTag,
+                    teamName,
+                    teamStartingTrophies,
+                    teamTrophyChange,
+                    teamCrowns,
+                    teamKingTowerHitPoints,
+                    teamPrincessTowerHitPoints,
+                    teamClanBadgeId,
+                    teamCards::STRUCT(\"name\" VARCHAR, id BIGINT, \"level\" BIGINT, starLevel BIGINT, evolutionLevel BIGINT, maxLevel BIGINT, maxEvolutionLevel BIGINT, rarity VARCHAR, elixirCost BIGINT, iconUrls STRUCT(medium VARCHAR, evolutionMedium VARCHAR))[] AS teamCards,
+                    opponentTag,
+                    opponentName,
+                    opponentStartingTrophies,
+                    opponentTrophyChange,
+                    opponentCrowns,
+                    opponentKingTowerHitPoints,
+                    opponentPrincessTowerHitPoints,
+                    opponentClanTag,
+                    opponentClanName,
+                    opponentClanBadgeId,
+                    opponentCards::STRUCT(\"name\" VARCHAR, id BIGINT, \"level\" BIGINT, starLevel BIGINT, evolutionLevel BIGINT, maxLevel BIGINT, maxEvolutionLevel BIGINT, rarity VARCHAR, elixirCost BIGINT, iconUrls STRUCT(medium VARCHAR, evolutionMedium VARCHAR))[] AS opponentCards,
+                    isHostedMatch,
+                    leagueNumber,
+                    winner
+            FROM read_parquet('{}', union_by_name = true)
+            ORDER BY battleTime DESC
+        ) TO '{}'",
+        &glob_path_str, &file_path_str
+    );
 
     let conn = Connection::open_in_memory()?;
-    // let mut stmt = conn.prepare(&sql)?;
     match conn.execute(&sql, []) {
         Ok(_) => Ok(()),
         Err(e) => Err(Box::new(e)),
