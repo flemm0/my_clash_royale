@@ -1,0 +1,8 @@
+services:
+  app:
+    build: .
+    volumes:
+      - /mnt/drive/projects/my_clash_royale/my_data:/app/my_data
+      - /mnt/drive/projects/my_clash_royale/app.log:/mnt/drive/projects/my_clash_royale/app.log
+    environment:
+      - HOME=/root
